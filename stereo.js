@@ -81,6 +81,7 @@ void main() {
         uniforms.iMouse.value.set( event.clientX, event.clientY );
         renderer.render( scene, camera );
     });
+    renderer.render( scene, camera );
 }
 
 window.stereogram = stereogram;

@@ -84,7 +84,7 @@
       }
     }
 
-    canvas {
+    figure {
       margin-top: 40px;
     }
   </style>
@@ -92,13 +92,25 @@
 
 <body>
   <div class="container">
-    <div id="txt">Upload any image to get its depth. <br> Current size: 518px x 518px</div>
+    <div id="txt">Upload any image to get its depth and generate stereogram. <br> Current size: 518px x 518px</div>
     <input type="file" id="file" />
   </div>
   <div id="loadingOverlay">
     <div class="loadingSpinner"></div>
     <div class="loadingText" id="loadingText">Processing...</div>
   </div>
+  <figure>
+    <div id="inputImage"></div>
+    <figcaption>The input image</figcaption>
+  </figure>
+  <figure>
+    <div id="depthImage"></div>
+    <figcaption>The generated depth image</figcaption>
+  </figure>
+  <figure>
+    <div id="stereogram"></div>
+    <figcaption>The generated stereogram, move mouse horizontally</figcaption>
+  </figure>
   <script>
 
     // Overlay with loader 
@@ -216,7 +228,7 @@
         canvas.height = size;
         let ctx = canvas.getContext("2d");
         ctx.drawImage(image, 0, 0, size, size);
-        document.body.appendChild(canvas);
+        document.querySelector("#inputImage").appendChild(canvas);
         const inputImgData = ctx.getImageData(0, 0, size, size);
 
         const test = preprocess(inputImgData, size, size);
@@ -230,12 +242,12 @@
         canvas.width = output.dims[2];
         canvas.height = output.dims[1];
         ctx.putImageData(depthImgData, 0, 0);
-        document.body.appendChild(canvas);
+        document.querySelector("#depthImage").appendChild(canvas);
 
         canvas = document.createElement("canvas");
         canvas.width = size;
         canvas.height = size * (image.naturalHeight / image.naturalWidth);
-        document.body.appendChild(canvas);
+        document.querySelector("#stereogram").appendChild(canvas);
         stereogram(canvas, inputImgData, depthImgData);
 
         hideLoading(); // Hide overlay
