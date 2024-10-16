@@ -5,7 +5,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="initial-scale=1.0" />
   <title>Stereogram</title>
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
   <script type="importmap">
@@ -23,27 +23,20 @@
       margin: 0;
     }
 
-    #txt {
+    .container {
       text-align: center;
+    }
+  
+    #txt {
       display: block;
     }
 
-    .container {
-      position: relative;
-      height: 50px;
-      width: 100vw;
-    }
-
     #file {
-      position: relative;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
       /* Optional: Add styling to the file input if needed */
       padding: 10px;
       border: 1px solid #ccc;
     }
-
+  
     #loadingOverlay {
       position: fixed;
       top: 0;
@@ -100,16 +93,20 @@
     <div class="loadingText" id="loadingText">Processing...</div>
   </div>
   <figure>
-    <div id="inputImage"></div>
+    <canvas id="inputImage" width="518" height="518"></canvas>
     <figcaption>The input image</figcaption>
   </figure>
   <figure>
-    <div id="depthImage"></div>
+    <canvas id="depthImage" width="518" height="518"></canvas>
     <figcaption>The generated depth image</figcaption>
   </figure>
   <figure>
-    <div id="stereogram"></div>
-    <figcaption>The generated stereogram, move mouse horizontally</figcaption>
+    <div>
+      <label for="range">Shift viewpoint</label>
+      <input type="range" min="-0.015" max="0.015" value="0" step="0.001" id="slider" />
+    </div>
+    <canvas id="stereogram" width="518" height="518"></canvas>
+    <figcaption>The generated stereogram</figcaption>
   </figure>
   <script>
 
@@ -223,12 +220,11 @@
       image.src = src;
       image.onload = async function () {
         const size = 518;
-        let canvas = document.createElement("canvas");
+        let canvas = document.querySelector("#inputImage");
         canvas.width = size;
         canvas.height = size;
         let ctx = canvas.getContext("2d");
         ctx.drawImage(image, 0, 0, size, size);
-        document.querySelector("#inputImage").appendChild(canvas);
         const inputImgData = ctx.getImageData(0, 0, size, size);
 
         const test = preprocess(inputImgData, size, size);
@@ -237,18 +233,16 @@
         const result = await myOrtSession.run({ image: input });
         const output = result.depth;
         const depthImgData = postprocess(output);
-        canvas = document.createElement("canvas");
+        canvas = document.querySelector("#depthImage");
         ctx = canvas.getContext("2d");
         canvas.width = output.dims[2];
         canvas.height = output.dims[1];
         ctx.putImageData(depthImgData, 0, 0);
-        document.querySelector("#depthImage").appendChild(canvas);
 
-        canvas = document.createElement("canvas");
+        canvas = document.querySelector("#stereogram");
         canvas.width = size;
         canvas.height = size * (image.naturalHeight / image.naturalWidth);
-        document.querySelector("#stereogram").appendChild(canvas);
-        stereogram(canvas, inputImgData, depthImgData);
+        stereogram(canvas, document.querySelector("#slider"), inputImgData, depthImgData);
 
         hideLoading(); // Hide overlay
       };

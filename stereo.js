@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export default function stereogram(canvas, image, depthImage) {
+export default function stereogram(canvas, slider, image, depthImage) {
 
     const renderer = new THREE.WebGLRenderer( { antialias: true, canvas } );
     renderer.autoClearColor = false;
@@ -21,17 +21,14 @@ export default function stereogram(canvas, image, depthImage) {
 #include <common>
 
 uniform vec2 iResolution;
-uniform vec2 iMouse;
+uniform float iMaxShift;
 uniform sampler2D image;
 uniform sampler2D depthImage;
 
 void main() {
     vec2 uv = gl_FragCoord.xy / iResolution.xy;
-    // normalize mouse coordinates
-    vec2 mouse = iMouse.xy / iResolution;
-    float maxShift = (mouse.x - 0.5) * 0.02;
 
-    if (maxShift == 0.0) {
+    if (iMaxShift == 0.0) {
         gl_FragColor = texture(image, uv);
         return;
     }
@@ -40,17 +37,17 @@ void main() {
     vec2 oldPoint = uv;
     vec2 currentDepthPoint = uv;
 
-    float d = maxShift;
-    float step = sign(maxShift) * increment;
-    float limit = -maxShift;
+    float d = iMaxShift;
+    float step = sign(iMaxShift) * increment;
+    float limit = -iMaxShift;
 
-    while ((maxShift > 0.0 && d >= limit) || (maxShift < 0.0 && d <= limit)) {
+    while ((iMaxShift > 0.0 && d >= limit) || (iMaxShift < 0.0 && d <= limit)) {
         vec2 depthPoint = currentDepthPoint;
         depthPoint.x = currentDepthPoint.x + d;
         float dFT = texture(depthImage, depthPoint).r * 2.0 - 1.0;
-        float shiftFT = dFT * maxShift;
+        float shiftFT = dFT * iMaxShift;
         
-        if ((maxShift > 0.0 && -shiftFT <= d) || (maxShift < 0.0 && -shiftFT >= d)) {
+        if ((iMaxShift > 0.0 && -shiftFT <= d) || (iMaxShift < 0.0 && -shiftFT >= d)) {
             vec2 newPoint = oldPoint;
             newPoint.x = oldPoint.x - shiftFT;
             gl_FragColor = texture(image, newPoint);
@@ -66,7 +63,7 @@ void main() {
     const depthTexture = new THREE.Texture(depthImage);
     depthTexture.needsUpdate = true;
     const uniforms = {
-        iMouse: { value: new THREE.Vector2() },
+        iMaxShift: { value: 0.0 },
         iResolution: { value: new THREE.Vector2(canvas.width, canvas.height) },
         image: { value: imageTexture },
         depthImage: { value: depthTexture },
@@ -77,8 +74,8 @@ void main() {
     } );
     scene.add( new THREE.Mesh( plane, material ) );
 
-    canvas.addEventListener("mousemove", (event) => {
-        uniforms.iMouse.value.set( event.clientX, event.clientY );
+    slider.addEventListener("input", (event) => {
+        uniforms.iMaxShift.value = event.target.valueAsNumber;
         renderer.render( scene, camera );
     });
     renderer.render( scene, camera );
