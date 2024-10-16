@@ -29,49 +29,42 @@ void main() {
     vec2 uv = gl_FragCoord.xy / iResolution.xy;
     // normalize mouse coordinates
     vec2 mouse = iMouse.xy / iResolution;
-    float increment = 1.0 / iResolution.x;
     float maxShift = (mouse.x - 0.5) * 0.02;
+
+    if (maxShift == 0.0) {
+        gl_FragColor = texture(image, uv);
+        return;
+    }
+
+    float increment = 1.0 / iResolution.x;
     vec2 oldPoint = uv;
     vec2 currentDepthPoint = uv;
-    
-    if (maxShift > 0.0) { //positive shift
-        float d = -maxShift;
-        while (d <= maxShift) {
-            vec2 depthPoint = currentDepthPoint;
-            depthPoint.x = currentDepthPoint.x + d;
-            float dFT = texture(depthImage, depthPoint).r * 2.0 - 1.0;
-            float shiftFT = dFT * maxShift;
-            if (-shiftFT <= d) {
-                vec2 newPoint = oldPoint;
-                newPoint.x = oldPoint.x - shiftFT;
-                gl_FragColor = texture(image, newPoint);
-                return;
-            }
-            d = d + increment;
+
+    float d = abs(maxShift);
+    float step = maxShift > 0.0 ? increment : -increment;
+    float limit = -maxShift;
+
+    while ((maxShift > 0.0 && d >= limit) || (maxShift < 0.0 && d <= limit)) {
+        vec2 depthPoint = currentDepthPoint;
+        depthPoint.x = currentDepthPoint.x + d;
+        float dFT = texture(depthImage, depthPoint).r * 2.0 - 1.0;
+        float shiftFT = dFT * maxShift;
+        
+        if ((maxShift > 0.0 && -shiftFT <= d) || (maxShift < 0.0 && -shiftFT >= d)) {
+            vec2 newPoint = oldPoint;
+            newPoint.x = oldPoint.x - shiftFT;
+            gl_FragColor = texture(image, newPoint);
+            return;
         }
         
-    } else if (maxShift < 0.0) { //negative shift
-        float d = -maxShift;
-        while (d >= maxShift) {
-            vec2 depthPoint = currentDepthPoint;
-            depthPoint.x = currentDepthPoint.x + d;
-            float dFT = texture(depthImage, depthPoint).r * 2.0 - 1.0;
-            float shiftFT = dFT * maxShift;
-            if (-shiftFT >= d) {
-                vec2 newPoint = oldPoint;
-                newPoint.x = oldPoint.x - shiftFT;
-                gl_FragColor = texture(image, newPoint);
-                return;
-            }
-            d = d - increment;
-        }
+        d -= step;
     }
-    
-    gl_FragColor = texture(image, uv);
 }
     `;
     const imageTexture = new THREE.Texture(image);
+    imageTexture.needsUpdate = true;
     const depthTexture = new THREE.Texture(depthImage);
+    depthTexture.needsUpdate = true;
     const uniforms = {
         iMouse: { value: new THREE.Vector2() },
         iResolution: { value: new THREE.Vector2(canvas.width, canvas.height) },
