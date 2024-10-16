@@ -234,7 +234,7 @@
 
         canvas = document.createElement("canvas");
         canvas.width = size;
-        canvas.height = size;
+        canvas.height = size * (image.naturalHeight / image.naturalWidth);
         document.body.appendChild(canvas);
         stereogram(canvas, inputImgData, depthImgData);
 

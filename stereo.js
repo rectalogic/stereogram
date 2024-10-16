@@ -40,8 +40,8 @@ void main() {
     vec2 oldPoint = uv;
     vec2 currentDepthPoint = uv;
 
-    float d = abs(maxShift);
-    float step = maxShift > 0.0 ? increment : -increment;
+    float d = maxShift;
+    float step = sign(maxShift) * increment;
     float limit = -maxShift;
 
     while ((maxShift > 0.0 && d >= limit) || (maxShift < 0.0 && d <= limit)) {
