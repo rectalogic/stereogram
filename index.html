@@ -7,7 +7,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="initial-scale=1.0" />
   <title>Stereogram</title>
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
   <script type="importmap">
   {
     "imports": {
@@ -16,6 +15,97 @@
   }
   </script>
   <script src="stereo.js" type="module"></script>
+  <script type="module">
+
+    import { AutoProcessor, AutoModelForDepthEstimation, RawImage } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.21';
+  
+    // Overlay with loader 
+    const showLoading = () => {
+      document.getElementById('loadingOverlay').style.display = 'flex';
+    };
+    const hideLoading = () => {
+      document.getElementById('loadingOverlay').style.display = 'none';
+    };
+
+    const uploadfile = () => {
+      const fileInput = document.getElementById("file");
+      fileInput.addEventListener("change", function () {
+        showLoading(); // Show overlay
+        const file = this.files[0];
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = function () {
+          computeDepth(this.result);
+        };
+      });
+    };
+
+    const loadImage = (img, url) => {
+      return new Promise((resolve, reject) => {
+        img.onload = () => {
+          resolve(img);
+        }
+        img.onerror = e => {
+          reject(e);
+        }
+        img.src = url;
+      });
+    }
+
+    const loadImageBlob = (img, blobPromise) => {
+      return blobPromise.then((blob) => {
+        return loadImage(img, URL.createObjectURL(blob));
+      });
+    }
+
+    async function computeDepth(src) {
+      // Load model and processor
+      const depth = await AutoModelForDepthEstimation.from_pretrained("onnx-community/DepthPro-ONNX", { dtype: "q4" });
+      const processor = await AutoProcessor.from_pretrained("onnx-community/DepthPro-ONNX");
+
+      // Read and prepare image
+      const image = await RawImage.read(src);
+      const inputs = await processor(image);
+
+      // Run depth estimation model
+      const { predicted_depth, focallength_px } = await depth(inputs);
+
+      // Normalize the depth map to [0, 1]
+      const depth_map_data = predicted_depth.data;
+      let minDepth = Infinity;
+      let maxDepth = -Infinity;
+      for (let i = 0; i < depth_map_data.length; ++i) {
+        minDepth = Math.min(minDepth, depth_map_data[i]);
+        maxDepth = Math.max(maxDepth, depth_map_data[i]);
+      }
+      const depth_tensor = predicted_depth
+        .sub_(minDepth)
+        .div_(-(maxDepth - minDepth)) // Flip for visualization purposes
+        .add_(1)
+        .clamp_(0, 1)
+        .mul_(255)
+        .round_()
+        .to("uint8");
+
+      const depthImage = RawImage.fromTensor(depth_tensor);
+
+      const inputImg = document.querySelector("#inputImage");
+      const inputImgLoad = loadImageBlob(inputImg, image.toBlob());
+
+      const depthImg = document.querySelector("#depthImage");
+      const depthImgLoad = loadImageBlob(depthImg, depthImage.toBlob());
+
+      const canvas = document.querySelector("#stereogram");
+      await Promise.all([inputImgLoad, depthImgLoad]);
+      canvas.width = 518;
+      canvas.height = 518 * (inputImg.naturalHeight / inputImg.naturalWidth);
+      stereogram(canvas, document.querySelector("#slider"), inputImg, depthImg);
+
+      hideLoading(); // Hide overlay
+    }
+
+    window.onload = uploadfile;
+  </script>
   <style>
     html,
     body {
@@ -93,11 +183,11 @@
     <div class="loadingText" id="loadingText">Processing...</div>
   </div>
   <figure>
-    <canvas id="inputImage" width="518" height="518"></canvas>
+    <img id="inputImage" width="90%"/>
     <figcaption>The input image</figcaption>
   </figure>
   <figure>
-    <canvas id="depthImage" width="518" height="518"></canvas>
+    <img id="depthImage" width="90%"/>
     <figcaption>The generated depth image</figcaption>
   </figure>
   <figure>
@@ -105,151 +195,9 @@
       <label for="range">Shift viewpoint</label>
       <input type="range" min="-0.015" max="0.015" value="0" step="0.001" id="slider" />
     </div>
-    <canvas id="stereogram" width="518" height="518"></canvas>
+    <canvas id="stereogram"></canvas>
     <figcaption>The generated stereogram</figcaption>
   </figure>
-  <script>
-
-    // Overlay with loader 
-    const showLoading = () => {
-      document.getElementById('loadingOverlay').style.display = 'flex';
-    };
-    const hideLoading = () => {
-      document.getElementById('loadingOverlay').style.display = 'none';
-    };
-
-
-
-    const preprocess = (input_imageData, width, height) => {
-      var floatArr = new Float32Array(width * height * 3);
-      var floatArr1 = new Float32Array(width * height * 3);
-      var floatArr2 = new Float32Array(width * height * 3);
-
-      var j = 0;
-      for (let i = 1; i < input_imageData.data.length + 1; i++) {
-        if (i % 4 != 0) {
-          floatArr[j] = input_imageData.data[i - 1] / 255; // red color
-          j = j + 1;
-        }
-      }
-      for (let i = 1; i < floatArr.length + 1; i += 3) {
-        floatArr1[i - 1] = floatArr[i - 1]; // red   color
-        floatArr1[i] = floatArr[i]; // green color
-        floatArr1[i + 1] = floatArr[i + 1]; // blue  color
-
-      }
-      var k = 0;
-      for (let i = 0; i < floatArr.length; i += 3) {
-        floatArr2[k] = floatArr[i]; // red color
-        k = k + 1;
-      }
-      var l = k;
-      for (let i = 1; i < floatArr.length; i += 3) {
-        floatArr2[l] = floatArr[i]; // green color
-        l = l + 1;
-      }
-
-      var m = l;
-      for (let i = 2; i < floatArr.length; i += 3) {
-        floatArr2[m] = floatArr[i]; // blue color
-        m = m + 1;
-      }
-      return floatArr2;
-    };
-
-    const postprocess = (tensor) => {
-
-      const channels = tensor.dims[0];
-      const height = tensor.dims[1];
-      const width = tensor.dims[2];
-
-      const imageData = new ImageData(width, height);
-      const data = imageData.data;
-
-      const tensorData = new Float32Array(tensor.data.buffer);
-      let max_depth = 0;
-      let min_depth = Infinity;
-
-      // Find the min and max depth values
-      for (let h = 0; h < height; h++) {
-        for (let w = 0; w < width; w++) {
-          const tensorIndex = (0 * height + h) * width + w; // Only one channel is used
-          const value = tensorData[tensorIndex];
-          if (value > max_depth) max_depth = value;
-          if (value < min_depth) min_depth = value;
-        }
-      }
-
-      // Normalize and fill ImageData
-      for (let h = 0; h < height; h++) {
-        for (let w = 0; w < width; w++) {
-          const tensorIndex = (0 * height + h) * width + w; // Only one channel is used
-          const value = tensorData[tensorIndex];
-          const depth = ((value - min_depth) / (max_depth - min_depth)) * 255;
-
-          // Set grayscale value
-          data[(h * width + w) * 4] = Math.round(depth);    // Red channel
-          data[(h * width + w) * 4 + 1] = Math.round(depth); // Green channel
-          data[(h * width + w) * 4 + 2] = Math.round(depth); // Blue channel
-          data[(h * width + w) * 4 + 3] = 255;               // Alpha channel
-        }
-      }
-
-      return imageData;
-    };
-
-    const uploadfile = () => {
-      const fileInput = document.getElementById("file");
-      fileInput.addEventListener("change", function () {
-        showLoading(); // Show overlay
-        const file = this.files[0];
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = function () {
-
-          runMyModel(this.result);
-
-        };
-      });
-    };
-
-    async function runMyModel(src) {
-
-      const myOrtSession = await ort.InferenceSession.create("https://cdn.glitch.me/0f5359e2-6022-421b-88f7-13e276d0fb33/depthanythingv2-vits-dynamic-quant.onnx");
-      const image = new Image();
-      image.src = src;
-      image.onload = async function () {
-        const size = 518;
-        let canvas = document.querySelector("#inputImage");
-        canvas.width = size;
-        canvas.height = size;
-        let ctx = canvas.getContext("2d");
-        ctx.drawImage(image, 0, 0, size, size);
-        const inputImgData = ctx.getImageData(0, 0, size, size);
-
-        const test = preprocess(inputImgData, size, size);
-        const input = new ort.Tensor(new Float32Array(test), [1, 3, size, size]);
-        const downsample_ratio = new ort.Tensor(new Float32Array([1]));
-        const result = await myOrtSession.run({ image: input });
-        const output = result.depth;
-        const depthImgData = postprocess(output);
-        canvas = document.querySelector("#depthImage");
-        ctx = canvas.getContext("2d");
-        canvas.width = output.dims[2];
-        canvas.height = output.dims[1];
-        ctx.putImageData(depthImgData, 0, 0);
-
-        canvas = document.querySelector("#stereogram");
-        canvas.width = size;
-        canvas.height = size * (image.naturalHeight / image.naturalWidth);
-        stereogram(canvas, document.querySelector("#slider"), inputImgData, depthImgData);
-
-        hideLoading(); // Hide overlay
-      };
-    }
-
-    uploadfile();
-  </script>
 </body>
 
 </html>
