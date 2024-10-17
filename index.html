@@ -17,7 +17,7 @@
   <script src="stereo.js" type="module"></script>
   <script type="module">
 
-    import { AutoProcessor, AutoModelForDepthEstimation, RawImage } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.21';
+    import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.21';
   
     // Overlay with loader 
     const showLoading = () => {
@@ -59,41 +59,16 @@
     }
 
     async function computeDepth(src) {
-      // Load model and processor
-      const depth = await AutoModelForDepthEstimation.from_pretrained("onnx-community/DepthPro-ONNX", { dtype: "q4" });
-      const processor = await AutoProcessor.from_pretrained("onnx-community/DepthPro-ONNX");
+      const depthEstimator = await pipeline('depth-estimation', 'onnx-community/depth-anything-v2-base');
 
-      // Read and prepare image
-      const image = await RawImage.read(src);
-      const inputs = await processor(image);
-
-      // Run depth estimation model
-      const { predicted_depth, focallength_px } = await depth(inputs);
-
-      // Normalize the depth map to [0, 1]
-      const depth_map_data = predicted_depth.data;
-      let minDepth = Infinity;
-      let maxDepth = -Infinity;
-      for (let i = 0; i < depth_map_data.length; ++i) {
-        minDepth = Math.min(minDepth, depth_map_data[i]);
-        maxDepth = Math.max(maxDepth, depth_map_data[i]);
-      }
-      const depth_tensor = predicted_depth
-        .sub_(minDepth)
-        .div_(-(maxDepth - minDepth)) // Flip for visualization purposes
-        .add_(1)
-        .clamp_(0, 1)
-        .mul_(255)
-        .round_()
-        .to("uint8");
-
-      const depthImage = RawImage.fromTensor(depth_tensor);
+      // Predict depth of an image
+      const { depth } = await depthEstimator(src);
 
       const inputImg = document.querySelector("#inputImage");
-      const inputImgLoad = loadImageBlob(inputImg, image.toBlob());
+      const inputImgLoad = loadImage(inputImg, src);
 
       const depthImg = document.querySelector("#depthImage");
-      const depthImgLoad = loadImageBlob(depthImg, depthImage.toBlob());
+      const depthImgLoad = loadImageBlob(depthImg, depth.toBlob());
 
       const canvas = document.querySelector("#stereogram");
       await Promise.all([inputImgLoad, depthImgLoad]);
@@ -183,11 +158,11 @@
     <div class="loadingText" id="loadingText">Processing...</div>
   </div>
   <figure>
-    <img id="inputImage" width="90%"/>
+    <img id="inputImage" width="518"/>
     <figcaption>The input image</figcaption>
   </figure>
   <figure>
-    <img id="depthImage" width="90%"/>
+    <img id="depthImage" width="518"/>
     <figcaption>The generated depth image</figcaption>
   </figure>
   <figure>
@@ -195,7 +170,7 @@
       <label for="range">Shift viewpoint</label>
       <input type="range" min="-0.015" max="0.015" value="0" step="0.001" id="slider" />
     </div>
-    <canvas id="stereogram"></canvas>
+    <canvas id="stereogram" width="518"></canvas>
     <figcaption>The generated stereogram</figcaption>
   </figure>
 </body>
